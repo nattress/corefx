@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Reflection.PortableExecutable;
 
 namespace System.Reflection.Metadata.Ecma335
 {
@@ -23,6 +24,8 @@ namespace System.Reflection.Metadata.Ecma335
         private readonly MetadataBuilder _tablesAndHeaps;
         private readonly SerializedMetadata _serializedMetadata;
 
+        private readonly PEReader _reader;
+        private MetadataSizes _sizes;
         /// <summary>
         /// Metadata version string.
         /// </summary>
@@ -71,12 +74,88 @@ namespace System.Reflection.Metadata.Ecma335
             MetadataVersion = metadataVersion ?? DefaultMetadataVersionString;
             SuppressValidation = suppressValidation;
             _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(EmptyRowCounts, metadataVersionByteCount, isStandaloneDebugMetadata: false);
+            _sizes = _serializedMetadata.Sizes;
+        }
+        
+        /// <summary>
+        /// Creates a builder of a metadata root using an existing IL image as the metadata source to copy from
+        /// </summary>
+        public MetadataRootBuilder(PEReader reader)
+        {
+            _reader = reader;
+
+            Debug.Assert(HeapIndex.UserString == 0);
+            Debug.Assert((int)HeapIndex.String == 1);
+            Debug.Assert((int)HeapIndex.Blob == 2);
+            Debug.Assert((int)HeapIndex.Guid == 3);
+
+            var heapSizes = ImmutableArray.Create(
+                reader.GetMetadataReader().UserStringHeap.Block.Length,
+                reader.GetMetadataReader().StringHeap.Block.Length,
+                reader.GetMetadataReader().BlobHeap.Block.Length,
+                reader.GetMetadataReader().GuidHeap.Block.Length);
+            
+            _sizes = new MetadataSizes(GetRowCounts(reader.GetMetadataReader()), EmptyRowCounts, heapSizes, BlobUtilities.GetUTF8ByteCount(reader.GetMetadataReader().MetadataVersion), false);
+        }
+
+        private ImmutableArray<int> GetRowCounts(MetadataReader reader)
+        {
+            var rowCounts = ImmutableArray.CreateBuilder<int>(MetadataTokens.TableCount);
+            rowCounts.Count = MetadataTokens.TableCount;
+
+            rowCounts[(int)TableIndex.Assembly] = reader.GetTableRowCount(TableIndex.Assembly);
+            rowCounts[(int)TableIndex.AssemblyRef] = reader.GetTableRowCount(TableIndex.AssemblyRef);
+            rowCounts[(int)TableIndex.ClassLayout] = reader.GetTableRowCount(TableIndex.ClassLayout);
+            rowCounts[(int)TableIndex.Constant] = reader.GetTableRowCount(TableIndex.Constant);
+            rowCounts[(int)TableIndex.CustomAttribute] = reader.GetTableRowCount(TableIndex.CustomAttribute);
+            rowCounts[(int)TableIndex.DeclSecurity] = reader.GetTableRowCount(TableIndex.DeclSecurity);
+            rowCounts[(int)TableIndex.EncLog] = reader.GetTableRowCount(TableIndex.EncLog);
+            rowCounts[(int)TableIndex.EncMap] = reader.GetTableRowCount(TableIndex.EncMap);
+            rowCounts[(int)TableIndex.EventMap] = reader.GetTableRowCount(TableIndex.EventMap);
+            rowCounts[(int)TableIndex.Event] = reader.GetTableRowCount(TableIndex.Event);
+            rowCounts[(int)TableIndex.ExportedType] = reader.GetTableRowCount(TableIndex.ExportedType);
+            rowCounts[(int)TableIndex.FieldLayout] = reader.GetTableRowCount(TableIndex.FieldLayout);
+            rowCounts[(int)TableIndex.FieldMarshal] = reader.GetTableRowCount(TableIndex.FieldMarshal);
+            rowCounts[(int)TableIndex.FieldRva] = reader.GetTableRowCount(TableIndex.FieldRva);
+            rowCounts[(int)TableIndex.Field] = reader.GetTableRowCount(TableIndex.Field);
+            rowCounts[(int)TableIndex.File] = reader.GetTableRowCount(TableIndex.File);
+            rowCounts[(int)TableIndex.GenericParamConstraint] = reader.GetTableRowCount(TableIndex.GenericParamConstraint);
+            rowCounts[(int)TableIndex.GenericParam] = reader.GetTableRowCount(TableIndex.GenericParam);
+            rowCounts[(int)TableIndex.ImplMap] = reader.GetTableRowCount(TableIndex.ImplMap);
+            rowCounts[(int)TableIndex.InterfaceImpl] = reader.GetTableRowCount(TableIndex.InterfaceImpl);
+            rowCounts[(int)TableIndex.ManifestResource] = reader.GetTableRowCount(TableIndex.ManifestResource);
+            rowCounts[(int)TableIndex.MemberRef] = reader.GetTableRowCount(TableIndex.MemberRef);
+            rowCounts[(int)TableIndex.MethodImpl] = reader.GetTableRowCount(TableIndex.MethodImpl);
+            rowCounts[(int)TableIndex.MethodSemantics] = reader.GetTableRowCount(TableIndex.MethodSemantics);
+            rowCounts[(int)TableIndex.MethodSpec] = reader.GetTableRowCount(TableIndex.MethodSpec);
+            rowCounts[(int)TableIndex.MethodDef] = reader.GetTableRowCount(TableIndex.MethodDef);
+            rowCounts[(int)TableIndex.ModuleRef] = reader.GetTableRowCount(TableIndex.ModuleRef);
+            rowCounts[(int)TableIndex.Module] = reader.GetTableRowCount(TableIndex.Module);
+            rowCounts[(int)TableIndex.NestedClass] = reader.GetTableRowCount(TableIndex.NestedClass);
+            rowCounts[(int)TableIndex.Param] = reader.GetTableRowCount(TableIndex.Param);
+            rowCounts[(int)TableIndex.PropertyMap] = reader.GetTableRowCount(TableIndex.PropertyMap);
+            rowCounts[(int)TableIndex.Property] = reader.GetTableRowCount(TableIndex.Property);
+            rowCounts[(int)TableIndex.StandAloneSig] = reader.GetTableRowCount(TableIndex.StandAloneSig);
+            rowCounts[(int)TableIndex.TypeDef] = reader.GetTableRowCount(TableIndex.TypeDef);
+            rowCounts[(int)TableIndex.TypeRef] = reader.GetTableRowCount(TableIndex.TypeRef);
+            rowCounts[(int)TableIndex.TypeSpec] = reader.GetTableRowCount(TableIndex.TypeSpec);
+
+            rowCounts[(int)TableIndex.Document] = reader.GetTableRowCount(TableIndex.Document);
+            rowCounts[(int)TableIndex.MethodDebugInformation] = reader.GetTableRowCount(TableIndex.MethodDebugInformation);
+            rowCounts[(int)TableIndex.LocalScope] = reader.GetTableRowCount(TableIndex.LocalScope);
+            rowCounts[(int)TableIndex.LocalVariable] = reader.GetTableRowCount(TableIndex.LocalVariable);
+            rowCounts[(int)TableIndex.LocalConstant] = reader.GetTableRowCount(TableIndex.LocalConstant);
+            rowCounts[(int)TableIndex.StateMachineMethod] = reader.GetTableRowCount(TableIndex.StateMachineMethod);
+            rowCounts[(int)TableIndex.ImportScope] = reader.GetTableRowCount(TableIndex.ImportScope);
+            rowCounts[(int)TableIndex.CustomDebugInformation] = reader.GetTableRowCount(TableIndex.CustomDebugInformation);
+
+            return rowCounts.MoveToImmutable();
         }
 
         /// <summary>
         /// Returns sizes of various metadata structures.
         /// </summary>
-        public MetadataSizes Sizes => _serializedMetadata.Sizes;
+        public MetadataSizes Sizes => _sizes;
 
         /// <summary>
         /// Serializes metadata root content into the given <see cref="BlobBuilder"/>.
@@ -112,19 +191,27 @@ namespace System.Reflection.Metadata.Ecma335
                 Throw.ArgumentOutOfRange(nameof(mappedFieldDataStreamRva));
             }
 
-            if (!SuppressValidation)
+            if (_reader != null)
             {
-                _tablesAndHeaps.ValidateOrder();
+                var metadataByteReader = _reader.GetMetadata().GetReader();
+                builder.WriteBytes(metadataByteReader.ReadBytes(_reader.GetMetadata().Length));
             }
+            else
+            {
+                if (!SuppressValidation)
+                {
+                    _tablesAndHeaps.ValidateOrder();
+                }
 
-            // header:
-            MetadataBuilder.SerializeMetadataHeader(builder, MetadataVersion, _serializedMetadata.Sizes);
+                // header:
+                MetadataBuilder.SerializeMetadataHeader(builder, MetadataVersion, _serializedMetadata.Sizes);
 
-            // #~ or #- stream:
-            _tablesAndHeaps.SerializeMetadataTables(builder, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva, mappedFieldDataStreamRva);
+                // #~ or #- stream:
+                _tablesAndHeaps.SerializeMetadataTables(builder, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva, mappedFieldDataStreamRva);
 
-            // #Strings, #US, #Guid and #Blob streams:
-            _tablesAndHeaps.WriteHeapsTo(builder, _serializedMetadata.StringHeap);
+                // #Strings, #US, #Guid and #Blob streams:
+                _tablesAndHeaps.WriteHeapsTo(builder, _serializedMetadata.StringHeap);
+            }
         }
     }
 }

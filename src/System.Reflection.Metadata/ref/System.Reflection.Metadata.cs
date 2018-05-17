@@ -2728,6 +2728,7 @@ namespace System.Reflection.Metadata.Ecma335
     public sealed partial class MetadataRootBuilder
     {
         public MetadataRootBuilder(System.Reflection.Metadata.Ecma335.MetadataBuilder tablesAndHeaps, string metadataVersion = null, bool suppressValidation = false) { }
+        public MetadataRootBuilder(System.Reflection.PortableExecutable.PEReader peReader) { }
         public string MetadataVersion { get { throw null; } }
         public System.Reflection.Metadata.Ecma335.MetadataSizes Sizes { get { throw null; } }
         public bool SuppressValidation { get { throw null; } }
